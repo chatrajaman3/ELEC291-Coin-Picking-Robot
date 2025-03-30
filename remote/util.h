@@ -6,7 +6,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-#define F_CPU 32000000L
+#define SYSCLK 32000000L
 
 #define LCD_RS_0 (GPIOA->ODR &= ~BIT0)
 #define LCD_RS_1 (GPIOA->ODR |= BIT0)
@@ -21,9 +21,16 @@
 #define LCD_D7_0 (GPIOA->ODR &= ~BIT5)
 #define LCD_D7_1 (GPIOA->ODR |= BIT5)
 #define CHARS_PER_LINE 16
+#define MAXBUFFER 64
+
+typedef struct ComBuffer {
+	unsigned char buffer[MAXBUFFER];
+	unsigned head, tail;
+	unsigned count;
+} ComBuffer;
 
 void sleep(unsigned int ms);
-void sleep_us(unsigned char us);
+void usleep(unsigned char us);
 
 void lcd_init(void);
 void lcd_print(char *s, unsigned char line, unsigned char clear);

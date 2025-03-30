@@ -19,28 +19,28 @@
 		fprintf(stderr, "DEBUG: %s:%d: %s(): " fmt "\r\n",             \
 			__FILE__, __LINE__, __func__, __VA_ARGS__)
 #else
-	#define DEBUG_PRINT(fmt, ...) do {} while(0)
+	#define DEBUG_PRINT(fmt, ...) do {} while (0)
 #endif
 
 /*
- *               ----------
- *         VDD -|1       32|- VSS
- *        PC14 -|2       31|- BOOT0
- *        PC15 -|3       30|- PB7
- *        NRST -|4       29|- PB6
- *        VDDA -|5       28|- PB5
- * LCD_RS  PA0 -|6       27|- PB4
- * LCD_E   PA1 -|7       26|- PB3
- * LCD_D4  PA2 -|8       25|- PA15  UART2_RXD/JDY40_TXD
- * LCD_D5  PA3 -|9       24|- PA14  UART2_TXD/JDY40_RXD
- * LCD_D6  PA4 -|10      23|- PA13  JDY40_SET
- * LCD_D7  PA5 -|11      22|- PA12
- *         PA6 -|12      21|- PA11
- *         PA7 -|13      20|- PA10  UART1_RXD
- *         PB0 -|14      19|- PA9   UART1_TXD
- *         PB1 -|15      18|- PA8   JOYSTICK_SW
- *         VSS -|16      17|- VDD
- *               ----------
+ *                   ----------
+ *             VDD -|1       32|- VSS
+ *            PC14 -|2       31|- BOOT0
+ *            PC15 -|3       30|- PB7
+ *            NRST -|4       29|- PB6
+ *            VDDA -|5       28|- PB5
+ *     LCD_RS  PA0 -|6       27|- PB4
+ *     LCD_E   PA1 -|7       26|- PB3
+ *     LCD_D4  PA2 -|8       25|- PA15  UART2_RXD/JDY40_TXD
+ *     LCD_D5  PA3 -|9       24|- PA14  UART2_TXD/JDY40_RXD
+ *     LCD_D6  PA4 -|10      23|- PA13  JDY40_SET
+ *     LCD_D7  PA5 -|11      22|- PA12
+ *             PA6 -|12      21|- PA11
+ *             PA7 -|13      20|- PA10  UART1_RXD
+ * JOYSTICK_Y  PB0 -|14      19|- PA9   UART1_TXD
+ * JOYSTICK_X  PB1 -|15      18|- PA8   JOYSTICK_SW
+ *             VSS -|16      17|- VDD
+ *                   ----------
  */
 
 void init(void);
@@ -63,7 +63,7 @@ int main(void) {
 
 	reception_off();
 
-	/* Device is in loopback mode. Retrieve current configuration. */
+	/* Retrieve current configuration. */
 	send_command("AT+VER\r\n");
 	send_command("AT+BAUD\r\n");
 	send_command("AT+RFID\r\n");
@@ -72,7 +72,7 @@ int main(void) {
 	send_command("AT+POWE\r\n");
 	send_command("AT+CLSS\r\n");
 
-	/* Set device ID to 0xC0A8. */
+	/* Set device ID to 0xC0A8 and switch to channel 108. */
 	send_command("AT+DVIDC0A8\r\n");
 	send_command("AT+RFC108\r\n");
 
@@ -133,7 +133,7 @@ int main(void) {
 		do {
 			if (uart2_received() > 0)
 				break;
-			sleep_us(100);
+			usleep(100);
 		} while (++timeout < 250);
 
 		if (uart2_received() > 0) {

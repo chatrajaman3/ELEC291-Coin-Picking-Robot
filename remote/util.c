@@ -6,14 +6,6 @@
 #include "include/stm32l051xx.h"
 #include "util.h"
 
-#define MAXBUFFER 64
-
-typedef struct ComBuffer {
-	unsigned char buffer[MAXBUFFER];
-	unsigned head, tail;
-	unsigned count;
-} ComBuffer;
-
 unsigned com2_open, com2_error, com2_busy;
 ComBuffer com_tx_buf, com_rx_buf;
 
@@ -33,12 +25,12 @@ void USART2_Handler(void) {
 void sleep(unsigned int ms) {
 	unsigned int i;
 	for (i = 0; i < 4*ms; ++i)
-		sleep_us(250);
+		usleep(250);
 	return;
 }
 
-void sleep_us(unsigned char us) {
-	SysTick->LOAD = (F_CPU / 1000000L * us) - 1;
+void usleep(unsigned char us) {
+	SysTick->LOAD = (SYSCLK / 1000000L * us) - 1;
 	SysTick->VAL = 0;
 	SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk;
 	while ((SysTick->CTRL & BIT16) == 0);
@@ -96,7 +88,7 @@ void lcd_byte(unsigned char x) {
 	if (x & 0x10) LCD_D4_1; else LCD_D4_0;
 	lcd_pulse();
 
-	sleep_us(40);
+	usleep(40);
 
 	if (x & 0x08) LCD_D7_1; else LCD_D7_0;
 	if (x & 0x04) LCD_D6_1; else LCD_D6_0;
@@ -109,7 +101,7 @@ void lcd_byte(unsigned char x) {
 
 void lcd_pulse(void) {
 	LCD_E_1;
-	sleep_us(40);
+	usleep(40);
 	LCD_E_0;
 	return;
 }
@@ -165,7 +157,7 @@ void uart2_init(int baud) {
 
 	RCC->IOPENR |= BIT0;
 	
-	baud_rate_divisor = F_CPU;
+	baud_rate_divisor = SYSCLK;
 	baud_rate_divisor = baud_rate_divisor / (long)baud;
 
 	GPIOA->OSPEEDR |= BIT28;
