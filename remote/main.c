@@ -46,6 +46,7 @@
 void init(void);
 void send_command(char *s);
 void reception_off(void);
+int pb_read(void);
 
 int main(void) {
 	int x, y, timeout;
@@ -118,11 +119,15 @@ int main(void) {
 			buf[0] |= 0b1 << 4;
 		}
 
-		DEBUG_PRINT("%d", buf[0]);
+		buf[1] = pb_read();
+
+		DEBUG_PRINT("buf: [%d, %d]", buf[0], buf[1]);
 
 		com2_eputc('!');
 		sleep(5);
 		com2_eputc(buf[0]);
+		sleep(5);
+		com2_eputc(buf[1]);
 		sleep(5);
 		com2_eputc('\n');
 
@@ -176,6 +181,11 @@ void init(void) {
 	GPIOA->MODER &= ~(BIT16|BIT17);
 	GPIOA->PUPDR |= BIT16; 
 	GPIOA->PUPDR &= ~BIT17;
+
+	/* Push-button array ADC input. */
+	GPIOA->MODER &= ~(BIT12|BIT13);
+	GPIOA->PUPDR |= BIT12;
+	GPIOA->PUPDR &= ~BIT13;
 }
 
 void send_command(char *s) {
@@ -198,4 +208,39 @@ void reception_off(void) {
 	GPIOA->ODR |= BIT13;
 	while (uart2_received() > 0)
 		com2_egetc();
+}
+
+int pb_read(void) {
+	int pb_adc;
+	pb_adc = adc_read(ADC_CHSELR_CHSEL6);
+	DEBUG_PRINT("pb_adc: %d", pb_adc);
+
+	/* A 1000 ohm resistor is connected to the analogue push button
+	 * array input pin. The following values were read for their
+	 * respective buttons:
+	 * - button 1: 320;
+	 * - button 2: 460;
+	 * - button 3: 580;
+	 * - button 4: 730;
+	 * - button 5: 930;
+	 * - button 6: 1260;
+	 * - button 7: 1920;
+	 * - button 8: 4090. */
+	if (pb_adc > 0xF00)
+		return 0b1 << 7;
+	if (pb_adc > 0x700)
+		return 0b1 << 6;
+	if (pb_adc > 0x480)
+		return 0b1 << 5;
+	if (pb_adc > 0x380)
+		return 0b1 << 4;
+	if (pb_adc > 0x280)
+		return 0b1 << 3;
+	if (pb_adc > 0x200)
+		return 0b1 << 2;
+	if (pb_adc > 0x180)
+		return 0b1 << 1;
+	if (pb_adc > 0x100)
+		return 0b1;
+	return 0;
 }
