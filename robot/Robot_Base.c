@@ -34,6 +34,13 @@ volatile unsigned int servo_switch = 0; //0 for elbow, 1 for shoulder
 #define RELOAD_10MS (0x10000L-(SYSCLK/(12L*100L)))
 #define ARM_DELAY 500
 
+#define TRIG_PIN P3_0
+#define ECHO_PIN P3_1
+
+#define BACKLED_PIN P0_3
+
+#define NDEBUG
+
 #ifndef NDEBUG
 	#define DEBUG_PRINT(fmt, ...) printf("DEBUG: %s:%d: " fmt "\r\n", __FILE__, __LINE__, __VA_ARGS__)
 #else
@@ -94,10 +101,13 @@ char _c51_external_startup (void)
 	#endif
 	
 	// Configure the pins used as outputs
-	P0MDOUT |= 0b_0001_0001; // Configure UART0 TX (P0.4) and UART1 TX (P0.0) as push-pull output
+	P0MDOUT |= 0b_0001_1001; // Configure UART0 TX (P0.4) and UART1 TX (P0.0) as push-pull output
 	P1MDOUT |= 0b_1010_1111; // OUPTUT1 to OUTPUT4, coin detector
 	P2MDOUT|=0b_0101_0011; //Shoulder and elbow servo, electromagnet 
 
+	P3MDOUT |= 0x01;      // P3.0 (TRIG) push-pull
+    P3MDOUT &= ~0x02;     // P3.1 (ECHO) open-drain
+   // P3SKIP |= 0x03;       // Skip P3.0 and P3.1
 	XBR0     = 0x01; // Enable UART0 on P0.4(TX) and P0.5(RX)                     
 	XBR1     = 0X00; // 
 	XBR2     = 0x41; // Enable crossbar and uart 1
@@ -601,6 +611,7 @@ void motor_stop (void) {
 
 void motor_forward (void) {
 
+	BACKLED_PIN = 1;
 	OUTPIN1=1;
 	OUTPIN2=0;
 	OUTPIN3=1;
@@ -609,6 +620,7 @@ void motor_forward (void) {
 
 void motor_backward (void) {
 
+	BACKLED_PIN = 1;
 	OUTPIN1=0;
 	OUTPIN2=1;
 	OUTPIN3=0;
@@ -641,6 +653,23 @@ void random_turn(void) {
 	motor_left();
     
     waitms(turn_time);
+    motor_stop();
+    waitms(500); // Pause before moving forward again
+}
+
+void sonar_turn(void) {
+    unsigned int turn_direction = rand() % 2; // Randomly choose left (0) or right (1) // not needed
+    unsigned int turn_time_sonar = (rand() % 500) + 250; // Random turn duration between 500ms and 1500ms
+
+
+    if (turn_direction == 1) {
+        motor_right();
+    }
+    else {
+        motor_left();
+    }
+
+    waitms(turn_time_sonar);
     motor_stop();
     waitms(500); // Pause before moving forward again
 }
@@ -688,9 +717,7 @@ float base_volt(unsigned char pin) {
 void victory_dance(void) {
     motor_left();
     waitms(3000);
-
     motor_stop();
-
     shoulder_control(1.5);
     waitms(500);
     elbow_control(2.4);
@@ -702,6 +729,24 @@ void victory_dance(void) {
     elbow_control(1.0);
     waitms(500);
     shoulder_control(1.2);
+}
+
+void send_trigger_pulse() {
+    TRIG_PIN = 1;
+    Timer3us(10);  // 10 µs pulse
+    TRIG_PIN = 0;
+}
+
+unsigned int measure_echo_pulse() {
+    unsigned int duration = 0;
+
+    while (!ECHO_PIN);          // Wait for echo to go HIGH
+    while (ECHO_PIN) {          // Measure time echo stays HIGH
+        Timer3us(1);
+        duration++;
+    }
+
+    return duration;
 }
 
 void main (void)
@@ -718,10 +763,17 @@ void main (void)
 	//added
     char c;
 
+	//ultrasonic sensor 
+	unsigned int echo_time;
+    //float distance_cm;
+    
 	//servos 
 	float pulse_width;
     count20ms=0;
 	is_auto_mode = 0;
+
+
+
 	
 	waitms(500);
 	printf("\r\nEFM8LB12 JDY-40 Slave Test.\r\n");
@@ -734,7 +786,7 @@ void main (void)
 	InitPinADC(2, 3); // Configure P2.3 as analog input
 	InitADC();
 
-
+	TRIG_PIN = 0;  // Ensure TRIG is LOW
 
 	//added
 	UART1_Init(9600);
@@ -768,6 +820,23 @@ void main (void)
 	
 	while (1)
 	{
+		//for metal detection, changes in frequency represent coin detection
+		count=GetPeriod(30);
+		if(count>0)
+		{
+			f=(SYSCLK*30.0)/(count*12);
+			eputs("f=");
+			PrintNumber(f, 10, 7);
+			// eputs("Hz, count=");
+			// PrintNumber(count, 10, 8);
+			// eputs("          \r");
+			
+		}
+		else
+		{
+			eputs("NO SIGNAL                     \r");
+		}
+		
 		c = 0;
 		if (RXU1()) {
 			c = getchar1();
@@ -777,6 +846,7 @@ void main (void)
 		if (c == '#')
 			is_auto_mode = !is_auto_mode;
 
+restart:
 		if (is_auto_mode) {
 			DEBUG_PRINT("Automatic", 0);
 			goto automatic;
@@ -785,7 +855,8 @@ void main (void)
 			goto manual;
 		}
 
-manual:			
+manual:		
+
 		if(c=='!') // Master is sending message
 		{
 			getstr1(buff, sizeof(buff)-1);
@@ -854,12 +925,13 @@ manual:
 			}
 			#endif
 		}
-		else if(c=='@') // Master wants slave data
-		{
-		}
 	
-		continue;
+		goto telemetry;
+	
 automatic:
+
+
+
 		j=ADC_at_Pin(QFP32_MUX_P2_2);
 		v=(j*33000)/0x3fff; 
 		eputs("ADC[P2.2]=0x");
@@ -898,23 +970,12 @@ automatic:
 		// Not very good for high frequencies because of all the interrupts in the background
 		// but decent for low frequencies around 10kHz.
 		
-		//for metal detection, changes in frequency represent coin detection
-		count=GetPeriod(30);
-		if(count>0)
-		{
-			f=(SYSCLK*30.0)/(count*12);
-			eputs("f=");
-			PrintNumber(f, 10, 7);
-			eputs("Hz, count=");
-			PrintNumber(count, 10, 8);
-			eputs("          \r");
-			
-		
-		}
-		else
-		{
-			eputs("NO SIGNAL                     \r");
-		}
+		//ultrasonic code 
+		send_trigger_pulse();
+        echo_time = measure_echo_pulse();
+		SFRPAGE = 0x20;
+		c = SBUF1;
+		SFRPAGE = 0x00;
 
 		//will later change to > threshold_freq + 100->300
 		if (f > threshold_freq) {
@@ -928,6 +989,9 @@ automatic:
 			//pick up coin function
 			coin_pickup();
 			waitms(300);
+			SFRPAGE = 0x20;
+			c = SBUF1;
+			SFRPAGE = 0x00;
 			
 			//after pick up coin, incr coin counter
 			coin++;
@@ -942,21 +1006,58 @@ automatic:
 			waitms(400);
 			//change angle randomly
 			random_turn();
-			
+			SFRPAGE = 0x20;
+			c = SBUF1;
+			SFRPAGE = 0x00;
 
 			motor_stop();
+		}
+
+		else if ((float) echo_time/58 < 3.0){
+			motor_stop();
+			//backup a little 
+			motor_backward();
+	
+			waitms(500);
+
+			//change angle randomly
+			sonar_turn();
+			SFRPAGE = 0x20;
+			c = SBUF1;
+			SFRPAGE = 0x00;
+			
+			motor_stop();
+
 		}
 		
 		
 		//***can change this later to variable coin limit
-		else if (coin == 20) {
+		if (coin == 20) {
+			//victory_dance();
 			motor_stop();
+			is_auto_mode = 0;
+			coin = 0;
+			// ReceptionOff();
+			waitms(10);
+			SFRPAGE = 0x20;
+			c = SBUF1;
+			SFRPAGE = 0x00;
+			waitms(10);
+			// goto restart;
+			continue;
+		}
 			//other end of task functions or features below:
+
+		motor_forward();
+
+telemetry:
+		if (c=='@') // Master wants slave data
+		{
+			sprintf(buff, "%03ld\n", f - threshold_freq + 200);
+			waitms(5); // The radio seems to need this delay...
+			sendstr1(buff);
 		}
-		else {
-			motor_forward();
 			//eputs("      moving    \r");
-		}
 	}
 
 }
