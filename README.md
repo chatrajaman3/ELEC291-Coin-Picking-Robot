@@ -1,5 +1,7 @@
 # ELEC291-Coin-Picking-Robot
 
+https://youtu.be/fnM59C7P06g?si=-0fhyJMhkEJQYpF8
+
 Design, build, program, and test robot that detects and picks coins. The robot has two modes of operation: Automatic and Manual. In automatic mode the robot must operate within a predefined perimeter defined by a wire carrying an AC current and detect and pick the coins automatically. In manual mode, the robot is remote controlled by an external operator.
 
 # Design Requirements:
